@@ -8,33 +8,33 @@ import (
 )
 
 func main() {
-	hub := cli.NewRpcHub(os.Args[1:], NewServer, &Client{}, "/")
+	hub := cli.NewRpcHub(os.Args[1:], NewServerByArgs, &Client{}, "/")
 	hub.Run()
 }
 
 type Client struct {
-	Send func(path string, event string) (err error) `args:"path,event"`
-	Get func(path string) (event string, err error) `args:"path" return:"event"`
+	Set func(path string, key string, value string) (err error) `args:"path,key,event"`
+	Get func(path string, key string) (event string, err error) `args:"path,key" return:"event"`
 	Gets func(path string) (events []Event, err error) `args:"tags" return:"events"`
 }
 
-func (p *Server) Send(path string, event string) (err error) {
+func (p *Server) Set(path string, key string, event string) (err error) {
 	node, err := p.get(path, true)
 	if err != nil {
 		return
 	}
-	node.SetValue(event)
-	// TODO: save
+	node.SetValue(key, event)
+	err = p.persist.Save(path, key, event)
 	return
 }
 
-func (p *Server) Get(path string) (event string, err error) {
+func (p *Server) Get(path string, key string) (event string, err error) {
 	node, err := p.get(path, false)
 	if err != nil {
 		return
 	}
-	event = node.Value()
-	if event == "" {
+	event = node.GetValue(key)
+	if len(event) == 0 {
 		err = ErrEventNotExists
 	}
 	return
@@ -50,53 +50,80 @@ func (p *Server) Gets(path string) (events []Event, err error) {
 	return
 }
 
-func (p *Server) gets(node *Tree, prefix string, events []Event) (result []Event, err error) {
+func (p *Server) gets(node *Tree, path string, events []Event) (result []Event, err error) {
 	result = events
+	for k, v := range node.Values() {
+		result = append(result, Event{path, k, v})
+	}
 	for k, v := range node.Children() {
-		if len(v.Children()) != 0 && v.Value() != "" {
-			err = ErrNotPath
-			return
-		} else if v.Value() != "" {
-			result = append(events, Event{prefix + "/" + k, v.Value()})
-		} else {
-			result, err = p.gets(v, prefix + "/" + k, result)
-		}
+		result, err = p.gets(v, path + SEP + k, result)
 	}
 	return
 }
 
-func (p *Server) get(path string, create bool) (node *Tree, err error) {
-	// TODO: load
-	paths := strings.Split(path, "/")
+func (p *Server) get(path string, writing bool) (node *Tree, err error) {
+	err = p.check(path)
+	if err != nil {
+		return
+	}
+
+	if !writing {
+		err = p.persist.Load(path)
+		if err != nil {
+			return
+		}
+	}
+
+	paths := strings.Split(path, SEP)
 	node = p.cache
-	for i, it := range paths {
-		node = node.Child(it, create)
+	for _, it := range paths {
+		node = node.Child(it, writing)
 		if node == nil {
 			err = ErrPathNotExists
 			return
 		}
-		if node.Value() != "" && i != len(paths) - 1 {
-			err = ErrNotPath
-			return
-		}
 	}
 	return
 }
 
-func NewServer(args []string) (p interface{}, err error) {
-	p = &Server{NewTree()}
+func (p *Server) check(path string) (err error) {
+	if strings.HasPrefix(path, SEP) || strings.HasSuffix(path, SEP) {
+		err = ErrInValidPath
+	}
+	return
+}
+
+func NewServerByArgs(args []string) (p interface{}, err error) {
+	if len(args) != 1 {
+		err = errors.New("command args not matched")
+		return
+	}
+	p, err = NewServer(args[0])
+	return
+}
+
+func NewServer(path string) (p *Server, err error) {
+	root := NewTree()
+	persist, err := NewPersist(root, path)
+	if err != nil {
+		return
+	}
+	p = &Server{root, persist, make(map[string]bool)}
 	return
 }
 
 type Server struct {
 	cache *Tree
+	persist *Persist
+	cached map[string]bool
 }
 
 type Event struct {
 	Path string
+	Key string
 	Event string
 }
 
-var ErrNotPath = errors.New("not path")
 var ErrEventNotExists = errors.New("event not exists")
 var ErrPathNotExists = errors.New("path not exists")
+var ErrInValidPath = errors.New("invalid path")

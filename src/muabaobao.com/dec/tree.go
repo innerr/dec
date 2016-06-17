@@ -1,11 +1,15 @@
 package main
 
-func (p *Tree) SetValue(value string) {
-	p.value = value
+func (p *Tree) Values() map[string]string {
+	return p.values
 }
 
-func (p *Tree) Value() string {
-	return p.value
+func (p *Tree) SetValue(key string, value string) {
+	p.values[key] = value
+}
+
+func (p *Tree) GetValue(key string) string {
+	return p.values[key]
 }
 
 func (p *Tree) Children() map[string]*Tree {
@@ -22,10 +26,10 @@ func (p *Tree) Child(name string, create bool) *Tree {
 }
 
 func NewTree() *Tree {
-	return &Tree{children: make(map[string]*Tree)}
+	return &Tree{make(map[string]*Tree), make(map[string]string)}
 }
 
 type Tree struct {
 	children map[string]*Tree
-	value string
+	values map[string]string
 }
