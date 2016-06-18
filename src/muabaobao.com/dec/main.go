@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"sync"
 	"ember/cli"
 )
 
@@ -19,6 +20,8 @@ type Client struct {
 }
 
 func (p *Server) Set(path string, key string, event string) (err error) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	node, err := p.get(path, true)
 	if err != nil {
 		return
@@ -29,6 +32,8 @@ func (p *Server) Set(path string, key string, event string) (err error) {
 }
 
 func (p *Server) Get(path string, key string) (event string, err error) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	node, err := p.get(path, false)
 	if err != nil {
 		return
@@ -41,6 +46,8 @@ func (p *Server) Get(path string, key string) (event string, err error) {
 }
 
 func (p *Server) Gets(path string) (events []Event, err error) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	node, err := p.get(path, false)
 	if err != nil {
 		return
@@ -68,7 +75,7 @@ func (p *Server) get(path string, writing bool) (node *Tree, err error) {
 	}
 
 	if !writing {
-		err = p.persist.Load(path)
+		err = p.persist.Load(path, p.cached)
 		if err != nil {
 			return
 		}
@@ -79,7 +86,7 @@ func (p *Server) get(path string, writing bool) (node *Tree, err error) {
 	for _, it := range paths {
 		node = node.Child(it, writing)
 		if node == nil {
-			err = ErrPathNotExists
+			err = errors.New("path not exists: " + path)
 			return
 		}
 	}
@@ -88,7 +95,7 @@ func (p *Server) get(path string, writing bool) (node *Tree, err error) {
 
 func (p *Server) check(path string) (err error) {
 	if strings.HasPrefix(path, SEP) || strings.HasSuffix(path, SEP) {
-		err = ErrInValidPath
+		err = errors.New("invalid path: " + path)
 	}
 	return
 }
@@ -108,7 +115,7 @@ func NewServer(path string) (p *Server, err error) {
 	if err != nil {
 		return
 	}
-	p = &Server{root, persist, make(map[string]bool)}
+	p = &Server{cache: root, persist: persist, cached: make(map[string]bool)}
 	return
 }
 
@@ -116,6 +123,7 @@ type Server struct {
 	cache *Tree
 	persist *Persist
 	cached map[string]bool
+	lock sync.Mutex
 }
 
 type Event struct {
@@ -125,5 +133,3 @@ type Event struct {
 }
 
 var ErrEventNotExists = errors.New("event not exists")
-var ErrPathNotExists = errors.New("path not exists")
-var ErrInValidPath = errors.New("invalid path")

@@ -28,7 +28,7 @@ func (p *Persist) Save(path string, key string, event string) (err error) {
 	return
 }
 
-func (p *Persist) Load(base string) (err error) {
+func (p *Persist) Load(base string, loaded map[string]bool) (err error) {
 	base = p.path + SEP + base
 	err = filepath.Walk(base, func(abs string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -46,7 +46,14 @@ func (p *Persist) Load(base string) (err error) {
 			return errors.New("invalid base: " + path + " vs " + p.path)
 		}
 		rel := path[len(p.path) + 1: len(path)]
-		return p.load(abs, rel)
+		if loaded[rel] {
+			return nil
+		}
+		err = p.load(abs, rel)
+		if err == nil {
+			loaded[rel] = true
+		}
+		return err
 	})
 
 	if os.IsNotExist(err) {
