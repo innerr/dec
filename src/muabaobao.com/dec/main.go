@@ -10,6 +10,10 @@ import (
 
 func main() {
 	hub := cli.NewRpcHub(os.Args[1:], NewServerByArgs, &Client{}, "/")
+	cmds := Cmds{hub.RpcClient()}
+	hub.Cmds().Reg("set", "send an event to service", cmds.Set)
+	hub.Cmds().Reg("get", "fetch an event from service", cmds.Get)
+	hub.Cmds().Reg("gets", "fetch events by path from service", cmds.Gets)
 	hub.Run()
 }
 

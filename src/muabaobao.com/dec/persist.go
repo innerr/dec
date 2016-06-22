@@ -20,7 +20,7 @@ func (p *Persist) Save(path string, key string, event string) (err error) {
 		return errors.New("create dir failed while saving: " + err.Error())
 	}
 
-	file, err := os.OpenFile(path + SEP + DATA_FILE, os.O_RDWR | os.O_CREATE | os.O_TRUNC, 0640)
+	file, err := os.OpenFile(path + SEP + DATA_FILE, os.O_RDWR | os.O_APPEND | os.O_CREATE | os.O_SYNC, 0640)
 	if err != nil {
 		return errors.New("open failed while saving: " + err.Error())
 	}
